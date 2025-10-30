@@ -11,7 +11,6 @@
   const downloadBtn = document.getElementById('downloadBtn');
   
   // --- State Variables ---
-  // 1. ADDED "NORMAL" mode back in
   const FilterMode = ['NORMAL', 'RED FILTER', 'BLUE FILTER'];
   let currentModeIndex = 0; // Starts on "NORMAL"
   let currentStream = null;
@@ -89,32 +88,54 @@
     renderLoop();
   }
 
-  // Corrected filter logic
+  // --- NEW "OPPOSITE COLOR DECODER" FILTER LOGIC ---
   function applyFilterToPixels(data, mode) {
     const len = data.length;
+    
+    // Adjust this value to make the effect more or less dramatic.
+    // Higher values make the target color "disappear" more.
+    const contrast = 1.8; 
 
     if (mode === 'RED FILTER') {
       for (let i = 0; i < len; i += 4) {
         const r = data[i];
         const g = data[i + 1];
         const b = data[i + 2];
-        const avg = 0.299 * r + 0.587 * g + 0.114 * b; // Luminance
-        data[i] = avg;     // Set Red
-        data[i + 1] = 0;   // Zero Green
-        data[i + 2] = 0;   // Zero Blue
+        
+        // Target: Make non-red colors visible.
+        // If red is present, it reduces the other colors.
+        // If red is absent, other colors are more visible.
+        let v = (g + b - r) * contrast; // Focus on green+blue, subtract red
+        
+        v = Math.min(255, Math.max(0, v)); // Clamp values
+        
+        // Output as grayscale
+        data[i] = v;     // R
+        data[i + 1] = v; // G
+        data[i + 2] = v; // B
       }
     } else if (mode === 'BLUE FILTER') {
       for (let i = 0; i < len; i += 4) {
         const r = data[i];
         const g = data[i + 1];
         const b = data[i + 2];
-        const avg = 0.299 * r + 0.587 * g + 0.114 * b; // Luminance
-        data[i] = 0;       // Zero Red
-        data[i + 1] = 0;   // Zero Green
-        data[i + 2] = avg;     // Set Blue
+        
+        // Target: Make non-blue colors visible.
+        // If blue is present, it reduces the other colors.
+        // If blue is absent, other colors are more visible.
+        let v = (r + g - b) * contrast; // Focus on red+green, subtract blue
+        
+        v = Math.min(255, Math.max(0, v)); // Clamp values
+        
+        // Output as grayscale
+        data[i] = v;     // R
+        data[i + 1] = v; // G
+        data[i + 2] = v; // B
       }
     }
   }
+  // --- END OF NEW LOGIC ---
+
 
   function renderLoop() {
     const cw = canvasEl.width;
@@ -137,7 +158,6 @@
 
     ctx.drawImage(videoEl, dx, dy, renderW, renderH);
 
-    // 2. UPDATED RENDER LOGIC
     const mode = FilterMode[currentModeIndex];
     
     // Only apply filter if mode is NOT "NORMAL"
@@ -237,3 +257,4 @@
 
   init();
 })();
+
