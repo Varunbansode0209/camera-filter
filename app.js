@@ -102,16 +102,15 @@
         const g = data[i + 1];
         const b = data[i + 2];
         
-        // Target: Make non-red colors visible.
-        // If red is present, it reduces the other colors.
-        // If red is absent, other colors are more visible.
-        let v = (g + b - r) * contrast; // Focus on green+blue, subtract red
+        // Target: Make non-red colors (like blue) visible.
+        // This isolates the "blue-ness" of the pixel.
+        let v = (b - r - g) * contrast; // Focus on blue, subtract red/green
         
         v = Math.min(255, Math.max(0, v)); // Clamp values
         
-        // Output as grayscale
-        data[i] = v;     // R
-        data[i + 1] = v; // G
+        // Output as blue, with other channels zeroed
+        data[i] = 0;     // R
+        data[i + 1] = 0; // G
         data[i + 2] = v; // B
       }
     } else if (mode === 'BLUE FILTER') {
@@ -120,17 +119,16 @@
         const g = data[i + 1];
         const b = data[i + 2];
         
-        // Target: Make non-blue colors visible.
-        // If blue is present, it reduces the other colors.
-        // If blue is absent, other colors are more visible.
-        let v = (r + g - b) * contrast; // Focus on red+green, subtract blue
+        // Target: Make non-blue colors (like red) visible.
+        // This isolates the "red-ness" of the pixel.
+        let v = (r - g - b) * contrast; // Focus on red, subtract green/blue
         
         v = Math.min(255, Math.max(0, v)); // Clamp values
         
-        // Output as grayscale
+        // Output as red, with other channels zeroed
         data[i] = v;     // R
-        data[i + 1] = v; // G
-        data[i + 2] = v; // B
+        data[i + 1] = 0; // G
+        data[i + 2] = 0; // B
       }
     }
   }
@@ -257,4 +255,5 @@
 
   init();
 })();
+
 
