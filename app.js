@@ -5,15 +5,15 @@
   const ctx = canvasEl.getContext('2d', { willReadFrequently: true });
   const modeLabel = document.getElementById('modeLabel');
 
-  // Controls we are keeping
+  // Controls
   const switchBtn = document.getElementById('switchCameraBtn');
   const captureBtn = document.getElementById('captureBtn');
   const downloadBtn = document.getElementById('downloadBtn');
   
   // --- State Variables ---
-  // 1. REMOVED "RAW" mode
-  const FilterMode = ['RED FILTER', 'BLUE FILTER'];
-  let currentModeIndex = 0;
+  // 1. ADDED "NORMAL" mode back in
+  const FilterMode = ['NORMAL', 'RED FILTER', 'BLUE FILTER'];
+  let currentModeIndex = 0; // Starts on "NORMAL"
   let currentStream = null;
   let usingEnvironment = true;
   let lastCaptureDataUrl = null;
@@ -84,14 +84,12 @@
 
     videoEl.srcObject = currentStream;
     await videoEl.play().catch(() => {});
-
-    // 2. REMOVED calls to setupTorchCapability() and setupZoomCapability()
     
     setCanvasSizeToView();
     renderLoop();
   }
 
-  // 3. ENTIRELY NEW (and correct) filter logic
+  // Corrected filter logic
   function applyFilterToPixels(data, mode) {
     const len = data.length;
 
@@ -100,22 +98,20 @@
         const r = data[i];
         const g = data[i + 1];
         const b = data[i + 2];
-        // Calculate a better "average" (luminance)
-        const avg = 0.299 * r + 0.587 * g + 0.114 * b;
-        data[i] = avg;     // Set Red channel
-        data[i + 1] = 0;   // Zero out Green
-        data[i + 2] = 0;   // Zero out Blue
+        const avg = 0.299 * r + 0.587 * g + 0.114 * b; // Luminance
+        data[i] = avg;     // Set Red
+        data[i + 1] = 0;   // Zero Green
+        data[i + 2] = 0;   // Zero Blue
       }
     } else if (mode === 'BLUE FILTER') {
       for (let i = 0; i < len; i += 4) {
         const r = data[i];
         const g = data[i + 1];
         const b = data[i + 2];
-        // Calculate a better "average" (luminance)
-        const avg = 0.299 * r + 0.587 * g + 0.114 * b;
-        data[i] = 0;       // Zero out Red
-        data[i + 1] = 0;   // Zero out Green
-        data[i + 2] = avg;     // Set Blue channel
+        const avg = 0.299 * r + 0.587 * g + 0.114 * b; // Luminance
+        data[i] = 0;       // Zero Red
+        data[i + 1] = 0;   // Zero Green
+        data[i + 2] = avg;     // Set Blue
       }
     }
   }
@@ -141,12 +137,15 @@
 
     ctx.drawImage(videoEl, dx, dy, renderW, renderH);
 
-    // 4. UPDATED to always apply a filter (no "RAW" mode)
+    // 2. UPDATED RENDER LOGIC
     const mode = FilterMode[currentModeIndex];
-    const imgData = ctx.getImageData(0, 0, cw, ch);
-    // 5. REMOVED intensity slider value
-    applyFilterToPixels(imgData.data, mode);
-    ctx.putImageData(imgData, 0, 0);
+    
+    // Only apply filter if mode is NOT "NORMAL"
+    if (mode !== 'NORMAL') {
+      const imgData = ctx.getImageData(0, 0, cw, ch);
+      applyFilterToPixels(imgData.data, mode);
+      ctx.putImageData(imgData, 0, 0);
+    }
 
     rafId = requestAnimationFrame(renderLoop);
   }
@@ -176,8 +175,6 @@
     usingEnvironment = !usingEnvironment;
     await startCamera();
   });
-
-  // 6. REMOVED torch, zoom, and intensity listeners
 
   captureBtn.addEventListener('click', () => {
     try {
@@ -226,7 +223,7 @@
       console.error(err);
       alert('Unable to access camera. Check permissions and HTTPS connection.');
     });
-    showModeLabel(); // Show the first mode ("RED FILTER")
+    showModeLabel(); // Show the first mode ("NORMAL")
   }
 
   // Pause rendering when tab is hidden
