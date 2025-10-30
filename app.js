@@ -1,25 +1,30 @@
 (() => {
+  // --- Get Elements ---
   const videoEl = document.getElementById('video');
   const canvasEl = document.getElementById('canvas');
   const ctx = canvasEl.getContext('2d', { willReadFrequently: true });
   const modeLabel = document.getElementById('modeLabel');
 
+  // Controls we are keeping
   const switchBtn = document.getElementById('switchCameraBtn');
-  const torchBtn = document.getElementById('torchBtn');
-  const zoomSlider = document.getElementById('zoomSlider');
-  const intensitySlider = document.getElementById('intensitySlider');
   const captureBtn = document.getElementById('captureBtn');
   const downloadBtn = document.getElementById('downloadBtn');
-
-  const FilterMode = ['RAW', 'RED FILTER', 'BLUE FILTER'];
+  
+  // --- State Variables ---
+  // 1. REMOVED "RAW" mode
+  const FilterMode = ['RED FILTER', 'BLUE FILTER'];
   let currentModeIndex = 0;
   let currentStream = null;
   let usingEnvironment = true;
-  let torchEnabled = false;
   let lastCaptureDataUrl = null;
-  let rafId = null;
+  let rafId = null; // requestAnimationFrame ID
 
-  let touchStartX = 0; let touchStartY = 0; let touchActive = false;
+  // Touch controls for swiping
+  let touchStartX = 0; 
+  let touchStartY = 0;
+  let touchActive = false;
+
+  // --- Core Functions ---
 
   function setCanvasSizeToView() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -73,78 +78,44 @@
         currentStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: idealFacing } }, audio: false });
       } catch (e2) {
         currentStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-        usingEnvironment = false;
+        usingEnvironment = false; // Fallback
       }
     }
 
     videoEl.srcObject = currentStream;
     await videoEl.play().catch(() => {});
 
-    setupTorchCapability();
-    setupZoomCapability();
-
+    // 2. REMOVED calls to setupTorchCapability() and setupZoomCapability()
+    
     setCanvasSizeToView();
     renderLoop();
   }
 
-  function setupTorchCapability() {
-    torchEnabled = false;
-    torchBtn.disabled = true;
-    try {
-      const track = currentStream?.getVideoTracks?.()[0];
-      const caps = track?.getCapabilities?.();
-      if (caps && 'torch' in caps) {
-        torchBtn.disabled = false;
-      }
-    } catch {}
-  }
-
-  function setupZoomCapability() {
-    zoomSlider.disabled = true;
-    zoomSlider.min = '1';
-    zoomSlider.max = '1';
-    zoomSlider.value = '1';
-    try {
-      const track = currentStream?.getVideoTracks?.()[0];
-      const caps = track?.getCapabilities?.();
-      const settings = track?.getSettings?.();
-      if (caps && caps.zoom) {
-        const min = caps.zoom.min ?? 1;
-        const max = caps.zoom.max ?? 1;
-        const step = caps.zoom.step ?? 0.1;
-        zoomSlider.min = String(min);
-        zoomSlider.max = String(max);
-        zoomSlider.step = String(step);
-        zoomSlider.value = String(settings?.zoom ?? 1);
-        zoomSlider.disabled = false;
-      }
-    } catch {}
-  }
-
-  function applyFilterToPixels(data, mode, intensity) {
+  // 3. ENTIRELY NEW (and correct) filter logic
+  function applyFilterToPixels(data, mode) {
     const len = data.length;
-    const enhance = intensity;
-    if (mode === 'RAW') return;
 
     if (mode === 'RED FILTER') {
       for (let i = 0; i < len; i += 4) {
         const r = data[i];
         const g = data[i + 1];
         const b = data[i + 2];
-        const r2 = r * 0.15;
-        const g2 = Math.min(255, g * (0.9 + 0.4 * enhance));
-        const b2 = Math.min(255, b * (1.0 + 0.6 * enhance));
-        data[i] = r2; data[i + 1] = g2; data[i + 2] = b2;
+        // Calculate a better "average" (luminance)
+        const avg = 0.299 * r + 0.587 * g + 0.114 * b;
+        data[i] = avg;     // Set Red channel
+        data[i + 1] = 0;   // Zero out Green
+        data[i + 2] = 0;   // Zero out Blue
       }
     } else if (mode === 'BLUE FILTER') {
       for (let i = 0; i < len; i += 4) {
         const r = data[i];
         const g = data[i + 1];
         const b = data[i + 2];
-        const b2 = b * 0.15;
-        const r2 = Math.min(255, r * (1.0 + 0.6 * enhance));
-        const g2 = Math.min(255, g * (0.9 + 0.4 * enhance));
-        data[i] = r2; data[i + 1] = g2; data[i + 2] = b2;
+        // Calculate a better "average" (luminance)
+        const avg = 0.299 * r + 0.587 * g + 0.114 * b;
+        data[i] = 0;       // Zero out Red
+        data[i + 1] = 0;   // Zero out Green
+        data[i + 2] = avg;     // Set Blue channel
       }
     }
   }
@@ -153,6 +124,7 @@
     const cw = canvasEl.width;
     const ch = canvasEl.height;
 
+    // --- Aspect-ratio correct drawing ---
     const vw = videoEl.videoWidth || 640;
     const vh = videoEl.videoHeight || 480;
     const videoAspect = vw / vh;
@@ -165,56 +137,47 @@
     }
     const dx = Math.round((cw - renderW) / 2);
     const dy = Math.round((ch - renderH) / 2);
+    // --- End aspect-ratio logic ---
 
     ctx.drawImage(videoEl, dx, dy, renderW, renderH);
 
+    // 4. UPDATED to always apply a filter (no "RAW" mode)
     const mode = FilterMode[currentModeIndex];
-    if (mode !== 'RAW') {
-      const imgData = ctx.getImageData(0, 0, cw, ch);
-      applyFilterToPixels(imgData.data, mode, parseFloat(intensitySlider.value));
-      ctx.putImageData(imgData, 0, 0);
-    }
+    const imgData = ctx.getImageData(0, 0, cw, ch);
+    // 5. REMOVED intensity slider value
+    applyFilterToPixels(imgData.data, mode);
+    ctx.putImageData(imgData, 0, 0);
 
     rafId = requestAnimationFrame(renderLoop);
   }
 
+  // --- Touch Controls ---
   function onTouchStart(ev) {
     const t = ev.changedTouches[0];
-    touchActive = true; touchStartX = t.clientX; touchStartY = t.clientY;
+    touchActive = true; 
+    touchStartX = t.clientX; 
+    touchStartY = t.clientY;
   }
   function onTouchEnd(ev) {
-    if (!touchActive) return; touchActive = false;
+    if (!touchActive) return; 
+    touchActive = false;
     const t = ev.changedTouches[0];
-    const dx = t.clientX - touchStartX; const dy = t.clientY - touchStartY;
+    const dx = t.clientX - touchStartX; 
+    const dy = t.clientY - touchStartY;
+    // Check for a horizontal swipe
     if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) {
-      if (dx > 0) cycleMode(+1); else cycleMode(-1);
+      if (dx > 0) cycleMode(+1); // Swipe Right
+      else cycleMode(-1); // Swipe Left
     }
   }
 
+  // --- Event Listeners ---
   switchBtn.addEventListener('click', async () => {
     usingEnvironment = !usingEnvironment;
     await startCamera();
   });
 
-  torchBtn.addEventListener('click', async () => {
-    try {
-      const track = currentStream?.getVideoTracks?.()[0];
-      const caps = track?.getCapabilities?.();
-      if (caps && 'torch' in caps) {
-        torchEnabled = !torchEnabled;
-        await track.applyConstraints({ advanced: [{ torch: torchEnabled }] });
-      }
-    } catch {}
-  });
-
-  zoomSlider.addEventListener('input', async () => {
-    try {
-      const track = currentStream?.getVideoTracks?.()[0];
-      await track.applyConstraints({ advanced: [{ zoom: parseFloat(zoomSlider.value) }] });
-    } catch {}
-  });
-
-  intensitySlider.addEventListener('input', () => {});
+  // 6. REMOVED torch, zoom, and intensity listeners
 
   captureBtn.addEventListener('click', () => {
     try {
@@ -222,7 +185,8 @@
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const w = Math.floor(window.innerWidth * dpr);
       const h = Math.floor(window.innerHeight * dpr);
-      exportCanvas.width = w; exportCanvas.height = h;
+      exportCanvas.width = w; 
+      exportCanvas.height = h;
       const ectx = exportCanvas.getContext('2d');
       ectx.drawImage(canvasEl, 0, 0, w, h);
       lastCaptureDataUrl = exportCanvas.toDataURL('image/png');
@@ -242,13 +206,16 @@
     document.body.removeChild(a);
   });
 
+  // Window resize/orientation listeners
   window.addEventListener('resize', () => setCanvasSizeToView());
   window.addEventListener('orientationchange', () => setTimeout(setCanvasSizeToView, 200));
 
+  // Swipe gesture listeners
   const app = document.getElementById('app');
   app.addEventListener('touchstart', onTouchStart, { passive: true });
   app.addEventListener('touchend', onTouchEnd, { passive: true });
 
+  // --- Initialization ---
   async function init() {
     if (!navigator.mediaDevices?.getUserMedia) {
       alert('Camera not supported in this browser. Please use a modern mobile browser.');
@@ -259,9 +226,10 @@
       console.error(err);
       alert('Unable to access camera. Check permissions and HTTPS connection.');
     });
-    showModeLabel();
+    showModeLabel(); // Show the first mode ("RED FILTER")
   }
 
+  // Pause rendering when tab is hidden
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
       if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
@@ -272,5 +240,3 @@
 
   init();
 })();
-
-
