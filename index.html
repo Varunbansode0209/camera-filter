@@ -15,11 +15,24 @@
     <div class="top-bar">
       <div class="chip">
         <button id="switchCameraBtn" aria-label="Switch camera">Switch</button>
-        
+        <button id="torchBtn" aria-label="Toggle flashlight" disabled>Flash</button>
       </div>
-     
+      <div class="chip slider">
+        <span class="muted">Zoom</span>
+        <input id="zoomSlider" type="range" min="1" max="1" step="0.01" value="1" disabled />
+      </div>
+      <div class="chip slider">
+        <span class="muted">Intensity</span>
+        <input id="intensitySlider" type="range" min="0.5" max="2" step="0.05" value="1.3" />
+      </div>
+    </div>
 
-    
+    <div class="bottom-bar">
+      <button id="downloadBtn" class="btn small disabled" aria-label="Download last capture">⇩</button>
+      <button id="captureBtn" class="btn" aria-label="Capture">
+        <div class="dot"></div>
+      </button>
+    </div>
 
     <div id="modeLabel" class="mode-label">RAW</div>
   </div>
