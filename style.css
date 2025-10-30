@@ -1,0 +1,33 @@
+html, body { height: 100%; margin: 0; background: #000; color: #fff; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+#app { position: fixed; inset: 0; overflow: hidden; background: #000; touch-action: none; }
+
+video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: none; }
+canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; background: #000; }
+
+.mode-label { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(12px + env(safe-area-inset-bottom)); background: rgba(0,0,0,0.5); padding: 8px 12px; border-radius: 999px; font-weight: 600; letter-spacing: 0.3px; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); transition: opacity 180ms ease; }
+.mode-label.hidden { opacity: 0; }
+
+.top-bar { position: absolute; top: calc(8px + env(safe-area-inset-top)); left: 0; right: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; pointer-events: none; }
+.chip { pointer-events: auto; display: inline-flex; align-items: center; gap: 8px; background: rgba(0,0,0,0.45); padding: 8px 12px; border-radius: 999px; font-size: 14px; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,0.08); }
+.chip button, .chip input[type="range"] { all: unset; color: inherit; }
+.chip button { cursor: pointer; padding: 4px 8px; border-radius: 8px; background: rgba(255,255,255,0.08); }
+.chip button:active { background: rgba(255,255,255,0.18); }
+.muted { opacity: .8; }
+
+.bottom-bar { position: absolute; bottom: calc(8px + env(safe-area-inset-bottom)); left: 0; right: 0; display: flex; align-items: center; justify-content: center; gap: 12px; pointer-events: none; }
+.btn { pointer-events: auto; width: 64px; height: 64px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.7); display: grid; place-items: center; background: rgba(0,0,0,0.3); }
+.btn:active { transform: scale(0.98); }
+.btn.small { width: 44px; height: 44px; border-width: 2px; }
+.btn .dot { width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.85); }
+.btn.disabled { opacity: 0.4; pointer-events: none; }
+
+.fade { animation: fade 220ms ease; }
+@keyframes fade { from { opacity: 0.6; } to { opacity: 1; } }
+
+.slider { display: inline-flex; align-items: center; gap: 8px; }
+input[type="range"] { -webkit-appearance: none; width: 140px; height: 4px; background: rgba(255,255,255,0.2); border-radius: 999px; }
+input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; background: #fff; border-radius: 50%; box-shadow: 0 0 0 2px rgba(0,0,0,0.3); }
+input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; background: #fff; border: none; border-radius: 50%; }
+
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; }
+
