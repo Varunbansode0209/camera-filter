@@ -124,65 +124,44 @@
   // New robust filter: detect color-dominance per pixel and suppress detected ink pixels.
   // Intensity slider controls suppression strength and thresholding.
   function applyFilterToPixels(data, mode, intensity) {
-    const len = data.length;
-    const factor = Math.max(0.1, Math.min(3.0, parseFloat(intensity))); // clamp
-    // thresholds tuned for typical phone camera. Adjust if needed.
-    const baseThresh = 20;           // minimal dominance to consider colored ink
-    const scale = 120;              // scale range over which suppression ramps
-    // when mode is RED_FILTER we want to hide red-ink so we detect red-dominant pixels
-    for (let i = 0; i < len; i += 4) {
-      let r = data[i];
-      let g = data[i + 1];
-      let b = data[i + 2];
+  const len = data.length;
+  const factor = Math.min(Math.max(intensity, 1.0), 1.6); // lock safe range
 
-      // compute simple dominance scores
-      // positive when channel is notably stronger than others
-      const maxOtherRG = Math.max(g, b);
-      const redScore = r - maxOtherRG;   // high if pixel is mostly red
-      const maxOtherRB = Math.max(r, g);
-      const blueScore = b - maxOtherRB;  // high if pixel is mostly blue
+  // Map intensity: 1.0 = light filter, 1.6 = strong suppression
+  const strength = (factor - 1.0) / 0.6; // normalized 0–1
 
-      // luminance for graceful suppression (preserves paper texture)
-      const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+  for (let i = 0; i < len; i += 4) {
+    let r = data[i];
+    let g = data[i + 1];
+    let b = data[i + 2];
 
-      if (mode === 'RED FILTER') {
-        // show blue, hide red
-        // if pixel is red-dominant reduce saturation quickly
-        if (redScore > baseThresh) {
-          const s = Math.min(1, ((redScore - baseThresh) / scale) * factor);
-          // convert to dim grayscale to remove red ink while keeping paper texture
-          data[i] = data[i + 1] = data[i + 2] = lum * (1 - 0.9 * s);
-        } else if (blueScore > baseThresh) {
-          // emphasize blue ink slightly to make it pop through filter
-          const s2 = Math.min(1, ((blueScore - baseThresh) / scale) * factor);
-          data[i] = Math.min(255, r * (1 - 0.15 * s2));
-          data[i + 1] = Math.min(255, g * (1 + 0.15 * s2));
-          data[i + 2] = Math.min(255, b * (1 + 0.35 * s2));
-        } else {
-          // non-ink areas: slight contrast boost to keep paper visible
-          data[i] = Math.min(255, r * 0.98);
-          data[i + 1] = Math.min(255, g * 0.98);
-          data[i + 2] = Math.min(255, b * 0.98);
-        }
-      } else if (mode === 'BLUE FILTER') {
-        // show red, hide blue
-        if (blueScore > baseThresh) {
-          const s = Math.min(1, ((blueScore - baseThresh) / scale) * factor);
-          data[i] = data[i + 1] = data[i + 2] = lum * (1 - 0.9 * s);
-        } else if (redScore > baseThresh) {
-          const s2 = Math.min(1, ((redScore - baseThresh) / scale) * factor);
-          data[i] = Math.min(255, r * (1 + 0.35 * s2));
-          data[i + 1] = Math.min(255, g * (1 + 0.15 * s2));
-          data[i + 2] = Math.min(255, b * (1 - 0.15 * s2));
-        } else {
-          data[i] = Math.min(255, r * 0.98);
-          data[i + 1] = Math.min(255, g * 0.98);
-          data[i + 2] = Math.min(255, b * 0.98);
-        }
-      }
-      // alpha unchanged
+    if (mode === 'RED FILTER') {
+      // Red gelatin: keep red, suppress blue & green
+      const newR = r;
+      const newG = g * (1 - 0.8 * strength);
+      const newB = b * (1 - 0.95 * strength);
+
+      // white-balance correction
+      const avg = (newR + newG + newB) / 3;
+      data[i] = newR;
+      data[i + 1] = avg * 0.95;
+      data[i + 2] = newB;
+    }
+
+    else if (mode === 'BLUE FILTER') {
+      // Blue gelatin: keep blue, suppress red & green
+      const newR = r * (1 - 0.95 * strength);
+      const newG = g * (1 - 0.8 * strength);
+      const newB = b;
+
+      const avg = (newR + newG + newB) / 3;
+      data[i] = newR;
+      data[i + 1] = avg * 0.95;
+      data[i + 2] = newB;
     }
   }
+}
+
 
   function renderLoop() {
     const cw = canvasEl.width;
