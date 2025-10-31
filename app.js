@@ -1,29 +1,25 @@
 (() => {
-  // --- Get Elements ---
   const videoEl = document.getElementById('video');
   const canvasEl = document.getElementById('canvas');
   const ctx = canvasEl.getContext('2d', { willReadFrequently: true });
   const modeLabel = document.getElementById('modeLabel');
 
-  // Controls
   const switchBtn = document.getElementById('switchCameraBtn');
+  const torchBtn = document.getElementById('torchBtn');
+  const zoomSlider = document.getElementById('zoomSlider');
+  const intensitySlider = document.getElementById('intensitySlider');
   const captureBtn = document.getElementById('captureBtn');
   const downloadBtn = document.getElementById('downloadBtn');
-  
-  // --- State Variables ---
-  const FilterMode = ['NORMAL', 'RED FILTER', 'BLUE FILTER'];
-  let currentModeIndex = 0; // Starts on "NORMAL"
+
+  const FilterMode = ['RAW', 'RED FILTER', 'BLUE FILTER'];
+  let currentModeIndex = 0;
   let currentStream = null;
   let usingEnvironment = true;
+  let torchEnabled = false;
   let lastCaptureDataUrl = null;
-  let rafId = null; // requestAnimationFrame ID
+  let rafId = null;
 
-  // Touch controls for swiping
-  let touchStartX = 0; 
-  let touchStartY = 0;
-  let touchActive = false;
-
-  // --- Core Functions ---
+  let touchStartX = 0, touchStartY = 0, touchActive = false;
 
   function setCanvasSizeToView() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -77,49 +73,88 @@
         currentStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: idealFacing } }, audio: false });
       } catch (e2) {
         currentStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-        usingEnvironment = false; // Fallback
+        usingEnvironment = false;
       }
     }
 
     videoEl.srcObject = currentStream;
     await videoEl.play().catch(() => {});
-    
+
+    setupTorchCapability();
+    setupZoomCapability();
+
     setCanvasSizeToView();
     renderLoop();
   }
 
-  // --- NEW "PHYSICAL FILTER" (DECODER) LOGIC ---
-  function applyFilterToPixels(data, mode) {
+  function setupTorchCapability() {
+    torchEnabled = false;
+    torchBtn.disabled = true;
+    try {
+      const track = currentStream?.getVideoTracks?.()[0];
+      const caps = track?.getCapabilities?.();
+      if (caps && 'torch' in caps) {
+        torchBtn.disabled = false;
+      }
+    } catch {}
+  }
+
+  function setupZoomCapability() {
+    zoomSlider.disabled = true;
+    zoomSlider.min = '1';
+    zoomSlider.max = '1';
+    zoomSlider.value = '1';
+    try {
+      const track = currentStream?.getVideoTracks?.()[0];
+      const caps = track?.getCapabilities?.();
+      const settings = track?.getSettings?.();
+      if (caps && caps.zoom) {
+        const min = caps.zoom.min ?? 1;
+        const max = caps.zoom.max ?? 1;
+        const step = caps.zoom.step ?? 0.1;
+        zoomSlider.min = String(min);
+        zoomSlider.max = String(max);
+        zoomSlider.step = String(step);
+        zoomSlider.value = String(settings?.zoom ?? 1);
+        zoomSlider.disabled = false;
+      }
+    } catch {}
+  }
+
+  // Corrected filter simulation
+  function applyFilterToPixels(data, mode, intensity) {
     const len = data.length;
-    
-    if (mode === 'RED FILTER') {
-      // Keep the red channel, zero out green and blue
-      // This tints the whole image red.
-      // Blue/Green lines (r:0, g:0, b:255) will become (r:0, g:0, b:0) -> BLACK
-      // Red lines (r:255, g:0, b:0) will become (r:255, g:0, b:0) -> RED (blend in)
-      for (let i = 0; i < len; i += 4) {
-        data[i + 1] = 0; // G
-        data[i + 2] = 0; // B
+    const factor = parseFloat(intensity);
+
+    for (let i = 0; i < len; i += 4) {
+      let r = data[i];
+      let g = data[i + 1];
+      let b = data[i + 2];
+
+      if (mode === 'RED FILTER') {
+        // Simulate red filter: hide red lines, show blue
+        const redSuppression = 1.0 - 0.8 * factor;
+        r *= redSuppression;
+        g *= 0.6;
+        b *= 1.0 + 0.4 * factor;
+      } else if (mode === 'BLUE FILTER') {
+        // Simulate blue filter: hide blue lines, show red
+        const blueSuppression = 1.0 - 0.8 * factor;
+        r *= 1.0 + 0.4 * factor;
+        g *= 0.6;
+        b *= blueSuppression;
       }
-    } else if (mode === 'BLUE FILTER') {
-      // Keep the blue channel, zero out red and green
-      // This tints the whole image blue.
-      // Red lines (r:255, g:0, b:0) will become (r:0, g:0, b:0) -> BLACK
-      // Blue lines (r:0, g:0, b:255) will become (r:0, g:0, b:255) -> BLUE (blend in)
-      for (let i = 0; i < len; i += 4) {
-        data[i] = 0;     // R
-        data[i + 1] = 0; // G
-      }
+
+      data[i] = Math.min(255, r);
+      data[i + 1] = Math.min(255, g);
+      data[i + 2] = Math.min(255, b);
     }
   }
-  // --- END OF NEW LOGIC ---
-
 
   function renderLoop() {
     const cw = canvasEl.width;
     const ch = canvasEl.height;
 
-    // --- Aspect-ratio correct drawing ---
     const vw = videoEl.videoWidth || 640;
     const vh = videoEl.videoHeight || 480;
     const videoAspect = vw / vh;
@@ -132,47 +167,57 @@
     }
     const dx = Math.round((cw - renderW) / 2);
     const dy = Math.round((ch - renderH) / 2);
-    // --- End aspect-ratio logic ---
 
     ctx.drawImage(videoEl, dx, dy, renderW, renderH);
 
     const mode = FilterMode[currentModeIndex];
-    
-    // Only apply filter if mode is NOT "NORMAL"
-    if (mode !== 'NORMAL') {
+    if (mode !== 'RAW') {
       const imgData = ctx.getImageData(0, 0, cw, ch);
-      applyFilterToPixels(imgData.data, mode);
+      applyFilterToPixels(imgData.data, mode, parseFloat(intensitySlider.value));
       ctx.putImageData(imgData, 0, 0);
     }
 
     rafId = requestAnimationFrame(renderLoop);
   }
 
-  // --- Touch Controls ---
   function onTouchStart(ev) {
     const t = ev.changedTouches[0];
-    touchActive = true; 
-    touchStartX = t.clientX; 
-    touchStartY = t.clientY;
+    touchActive = true; touchStartX = t.clientX; touchStartY = t.clientY;
   }
+
   function onTouchEnd(ev) {
-    if (!touchActive) return; 
-    touchActive = false;
+    if (!touchActive) return; touchActive = false;
     const t = ev.changedTouches[0];
-    const dx = t.clientX - touchStartX; 
-    const dy = t.clientY - touchStartY;
-    // Check for a horizontal swipe
+    const dx = t.clientX - touchStartX; const dy = t.clientY - touchStartY;
     if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) {
-      if (dx > 0) cycleMode(+1); // Swipe Right
-      else cycleMode(-1); // Swipe Left
+      if (dx > 0) cycleMode(+1); else cycleMode(-1);
     }
   }
 
-  // --- Event Listeners ---
   switchBtn.addEventListener('click', async () => {
     usingEnvironment = !usingEnvironment;
     await startCamera();
   });
+
+  torchBtn.addEventListener('click', async () => {
+    try {
+      const track = currentStream?.getVideoTracks?.()[0];
+      const caps = track?.getCapabilities?.();
+      if (caps && 'torch' in caps) {
+        torchEnabled = !torchEnabled;
+        await track.applyConstraints({ advanced: [{ torch: torchEnabled }] });
+      }
+    } catch {}
+  });
+
+  zoomSlider.addEventListener('input', async () => {
+    try {
+      const track = currentStream?.getVideoTracks?.()[0];
+      await track.applyConstraints({ advanced: [{ zoom: parseFloat(zoomSlider.value) }] });
+    } catch {}
+  });
+
+  intensitySlider.addEventListener('input', () => {});
 
   captureBtn.addEventListener('click', () => {
     try {
@@ -180,8 +225,7 @@
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const w = Math.floor(window.innerWidth * dpr);
       const h = Math.floor(window.innerHeight * dpr);
-      exportCanvas.width = w; 
-      exportCanvas.height = h;
+      exportCanvas.width = w; exportCanvas.height = h;
       const ectx = exportCanvas.getContext('2d');
       ectx.drawImage(canvasEl, 0, 0, w, h);
       lastCaptureDataUrl = exportCanvas.toDataURL('image/png');
@@ -201,16 +245,13 @@
     document.body.removeChild(a);
   });
 
-  // Window resize/orientation listeners
   window.addEventListener('resize', () => setCanvasSizeToView());
   window.addEventListener('orientationchange', () => setTimeout(setCanvasSizeToView, 200));
 
-  // Swipe gesture listeners
   const app = document.getElementById('app');
   app.addEventListener('touchstart', onTouchStart, { passive: true });
   app.addEventListener('touchend', onTouchEnd, { passive: true });
 
-  // --- Initialization ---
   async function init() {
     if (!navigator.mediaDevices?.getUserMedia) {
       alert('Camera not supported in this browser. Please use a modern mobile browser.');
@@ -221,10 +262,9 @@
       console.error(err);
       alert('Unable to access camera. Check permissions and HTTPS connection.');
     });
-    showModeLabel(); // Show the first mode ("NORMAL")
+    showModeLabel();
   }
 
-  // Pause rendering when tab is hidden
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
       if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
@@ -235,4 +275,3 @@
 
   init();
 })();
-
