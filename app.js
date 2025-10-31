@@ -125,41 +125,64 @@
   // Intensity slider controls suppression strength and thresholding.
   function applyFilterToPixels(data, mode, intensity) {
   const len = data.length;
-  const factor = Math.min(Math.max(intensity, 1.0), 1.6); // intensity safety
-  const strength = (factor - 1.0) / 0.6; // normalized 0–1
+  const factor = Math.min(Math.max(intensity, 1.0), 1.6);
+  const hideStrength = 0.4 + 0.6 * ((factor - 1.0) / 0.6); // 0.4→1.0
+
+  function rgb2hsv(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    const d = max - min;
+    let h = 0;
+    if (d !== 0) {
+      if (max === r) h = ((g - b) / d + (g < b ? 6 : 0));
+      else if (max === g) h = (b - r) / d + 2;
+      else h = (r - g) / d + 4;
+      h *= 60;
+    }
+    const s = max === 0 ? 0 : d / max;
+    const v = max;
+    return [h, s, v];
+  }
+
+  function hsv2rgb(h, s, v) {
+    const c = v * s;
+    const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+    const m = v - c;
+    let r, g, b;
+    if (h < 60) [r, g, b] = [c, x, 0];
+    else if (h < 120) [r, g, b] = [x, c, 0];
+    else if (h < 180) [r, g, b] = [0, c, x];
+    else if (h < 240) [r, g, b] = [0, x, c];
+    else if (h < 300) [r, g, b] = [x, 0, c];
+    else [r, g, b] = [c, 0, x];
+    return [(r + m) * 255, (g + m) * 255, (b + m) * 255];
+  }
 
   for (let i = 0; i < len; i += 4) {
-    let r = data[i];
-    let g = data[i + 1];
-    let b = data[i + 2];
-
-    // Luminance keeps paper brightness stable
-    const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+    let r = data[i], g = data[i + 1], b = data[i + 2];
+    let [h, s, v] = rgb2hsv(r, g, b);
 
     if (mode === 'RED FILTER') {
-      // Simulate red gelatin: let red pass, fade out blue ink
-      const redDominant = r > b * 1.25 && r > g * 1.1; // detect red ink
-      const blueDominant = b > r * 1.25 && b > g * 1.1; // detect blue ink
-
-      if (redDominant) {
-        // Fade red ink toward white instead of black
-        const fade = 1 - strength;
-        data[i] = lum + (r - lum) * fade; // move toward paper tone
-        data[i + 1] = lum;
-        data[i + 2] = lum;
-      } else if (blueDominant) {
-        // Enhance blue ink visibility slightly
-        const boost = 1 + 0.8 * strength;
-        data[i] = r * 0.7;
-        data[i + 1] = g * 0.8;
-        data[i + 2] = Math.min(255, b * boost);
-      } else {
-        // Neutral paper area
-        data[i] = r;
-        data[i + 1] = g;
-        data[i + 2] = b;
+      // hide reds (330–30°)
+      if (h >= 330 || h <= 30) {
+        s *= (1 - hideStrength);
+        v = 1 - (1 - v) * (1 - hideStrength); // brighten toward paper
+      }
+    } else if (mode === 'BLUE FILTER') {
+      // hide blues (180–260°)
+      if (h >= 180 && h <= 260) {
+        s *= (1 - hideStrength);
+        v = 1 - (1 - v) * (1 - hideStrength);
       }
     }
+
+    [r, g, b] = hsv2rgb(h, s, v);
+    data[i] = r;
+    data[i + 1] = g;
+    data[i + 2] = b;
+  }
+}
+
 
     else if (mode === 'BLUE FILTER') {
       // Simulate blue gelatin: let blue pass, fade out red ink
