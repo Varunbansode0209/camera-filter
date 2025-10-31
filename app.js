@@ -125,9 +125,7 @@
   // Intensity slider controls suppression strength and thresholding.
   function applyFilterToPixels(data, mode, intensity) {
   const len = data.length;
-  const factor = Math.min(Math.max(intensity, 1.0), 1.6); // lock safe range
-
-  // Map intensity: 1.0 = light filter, 1.6 = strong suppression
+  const factor = Math.min(Math.max(intensity, 1.0), 1.6); // intensity safety
   const strength = (factor - 1.0) / 0.6; // normalized 0–1
 
   for (let i = 0; i < len; i += 4) {
@@ -135,32 +133,60 @@
     let g = data[i + 1];
     let b = data[i + 2];
 
-    if (mode === 'RED FILTER') {
-      // Red gelatin: keep red, suppress blue & green
-      const newR = r;
-      const newG = g * (1 - 0.8 * strength);
-      const newB = b * (1 - 0.95 * strength);
+    // Luminance keeps paper brightness stable
+    const lum = 0.299 * r + 0.587 * g + 0.114 * b;
 
-      // white-balance correction
-      const avg = (newR + newG + newB) / 3;
-      data[i] = newR;
-      data[i + 1] = avg * 0.95;
-      data[i + 2] = newB;
+    if (mode === 'RED FILTER') {
+      // Simulate red gelatin: let red pass, fade out blue ink
+      const redDominant = r > b * 1.25 && r > g * 1.1; // detect red ink
+      const blueDominant = b > r * 1.25 && b > g * 1.1; // detect blue ink
+
+      if (redDominant) {
+        // Fade red ink toward white instead of black
+        const fade = 1 - strength;
+        data[i] = lum + (r - lum) * fade; // move toward paper tone
+        data[i + 1] = lum;
+        data[i + 2] = lum;
+      } else if (blueDominant) {
+        // Enhance blue ink visibility slightly
+        const boost = 1 + 0.8 * strength;
+        data[i] = r * 0.7;
+        data[i + 1] = g * 0.8;
+        data[i + 2] = Math.min(255, b * boost);
+      } else {
+        // Neutral paper area
+        data[i] = r;
+        data[i + 1] = g;
+        data[i + 2] = b;
+      }
     }
 
     else if (mode === 'BLUE FILTER') {
-      // Blue gelatin: keep blue, suppress red & green
-      const newR = r * (1 - 0.95 * strength);
-      const newG = g * (1 - 0.8 * strength);
-      const newB = b;
+      // Simulate blue gelatin: let blue pass, fade out red ink
+      const redDominant = r > b * 1.25 && r > g * 1.1;
+      const blueDominant = b > r * 1.25 && b > g * 1.1;
 
-      const avg = (newR + newG + newB) / 3;
-      data[i] = newR;
-      data[i + 1] = avg * 0.95;
-      data[i + 2] = newB;
+      if (blueDominant) {
+        // Enhance blue ink
+        const boost = 1 + 0.8 * strength;
+        data[i] = r * 0.8;
+        data[i + 1] = g * 0.9;
+        data[i + 2] = Math.min(255, b * boost);
+      } else if (redDominant) {
+        // Fade red ink toward white (not black)
+        const fade = 1 - strength;
+        data[i] = lum + (r - lum) * fade;
+        data[i + 1] = lum;
+        data[i + 2] = lum;
+      } else {
+        data[i] = r;
+        data[i + 1] = g;
+        data[i + 2] = b;
+      }
     }
   }
 }
+
 
 
   function renderLoop() {
